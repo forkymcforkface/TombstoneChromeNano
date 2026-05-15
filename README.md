@@ -1,6 +1,6 @@
 # TombstoneChromeNano
 
-TombstoneChromeNano allows you to
+TombstoneChromeNano diplsays a terminal ui that easily allows you to:
 - Easily delete Chrome's 4 GB Gemini Nano AI model, and disable the Chrome AI setting.
 - Create a 1 KB "permanent lock" file in the model's place, preventing Chrome from downloading and overwriting it even if the AI setting is ever turned back on later.
 - Disable/Enable all other AI features within Chrome.
