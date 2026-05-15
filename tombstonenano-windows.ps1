@@ -1,39 +1,5 @@
-<#
-.SYNOPSIS
-    Block/unblock Chrome's Gemini Nano on-device AI model. Frees ~4 GB.
-
-.DESCRIPTION
-    Interactive menu, four actions:
-      [1] Block Gemini Nano AI        Set HKLM Chrome policy, delete weights.bin,
-                                      replace the model folder with a 1 KB
-                                      read-only file locked by a deny-W/D ACL
-                                      on the console user's SID.
-      [2] Unblock Gemini Nano AI      Reverses [1].
-      [3] Disable other Chrome AI     Sets umbrella + per-feature Gen-AI
-                                      policies (Help me write, Tab Organizer,
-                                      Theme generation, History search,
-                                      DevTools GenAI). No lock file.
-      [4] Re-enable other Chrome AI   Reverses [3].
-
-    Targets the interactive console user (not the elevation credential), so
-    a standard user UAC-elevating with a different admin still cleans up the
-    correct profile and the deny ACE pins to the right SID.
-
-.NOTES
-    Requires Administrator. Self-elevates via UAC. Tested on Windows 11.
-    If SmartScreen blocks: Unblock-File .\tombstonenano-windows.ps1
-
-.LINK
-    https://github.com/forkymcforkface/tombstonechromenano
-#>
-
-# Copyright (c) 2026 Kev (forkymcforkface) -- https://github.com/forkymcforkface
-# SPDX-License-Identifier: MIT  (see LICENSE)
-
 [CmdletBinding()]
 param(
-    # Internal: set when self-elevation re-launches this script, so the new
-    # elevated window stays open after Show-Menu returns. Not for end users.
     [Parameter(DontShow)]
     [switch]$PauseOnExit
 )
@@ -41,12 +7,8 @@ param(
 $Version         = '1.0.0'
 $VersionCheckUrl = 'https://raw.githubusercontent.com/forkymcforkface/tombstonechromenano/main/tombstonenano-windows.ps1'
 
-# --- Self-elevate via UAC if not already admin ---
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    # When invoked via `irm <url> | iex`, there is no .ps1 file on disk and
-    # $PSCommandPath is empty -- so the elevated child would have nothing to run.
-    # Persist our own source to %TEMP% in that case.
     if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath)) {
         $scriptPath = $PSCommandPath
     } else {
@@ -66,19 +28,11 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 
 $ErrorActionPreference = 'Stop'
 
-# ---------------------------------------------------------------------------
-# Resolve the target user (the one Chrome runs as), not the elevated context.
-# If the script self-elevated with different admin credentials, the current
-# SID and $env:LOCALAPPDATA belong to that admin -- not to the person whose
-# Chrome we want to clean up. Win32_ComputerSystem.UserName gives us the
-# interactive console user instead.
-# ---------------------------------------------------------------------------
 function Resolve-TargetUser {
     $consoleUser = $null
     try { $consoleUser = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).UserName } catch { }
 
     if ([string]::IsNullOrWhiteSpace($consoleUser)) {
-        # No interactive console (server / SSH / scheduled task). Fall back.
         $consoleUser = "$env:USERDOMAIN\$env:USERNAME"
     }
 
@@ -111,23 +65,15 @@ $RegPath   = 'HKLM:\SOFTWARE\Policies\Google\Chrome'
 $RegName   = 'GenAILocalFoundationalModelSettings'
 $ModelRoot = Join-Path $target.Profile 'AppData\Local\Google\Chrome\User Data\OptGuideOnDeviceModel'
 
-# Policies set by the "Disable ALL Chrome AI features" action.
-# Value 2 = "Do not allow" for the 0/1/2 = allow/improvement/disable Chrome
-# Gen-AI policy family. The umbrella (GenAiDefaultSettings) covers any feature
-# without its own specific policy; the explicit per-feature entries below are
-# belt-and-suspenders against the umbrella being overridden by future Chrome
-# defaults.
 $ExtraAiPolicies = [ordered]@{
-    'GenAiDefaultSettings'  = 2   # Umbrella: default for all Gen-AI features
-    'HelpMeWriteSettings'   = 2   # "Help me write" in text fields
-    'TabOrganizerSettings'  = 2   # AI tab grouping
-    'CreateThemesSettings'  = 2   # AI theme generation
-    'HistorySearchSettings' = 2   # AI-powered history search
-    'DevToolsGenAiSettings' = 2   # AI assistance in DevTools
+    'GenAiDefaultSettings'  = 2
+    'HelpMeWriteSettings'   = 2
+    'TabOrganizerSettings'  = 2
+    'CreateThemesSettings'  = 2
+    'HistorySearchSettings' = 2
+    'DevToolsGenAiSettings' = 2
 }
 
-# Remove HKLM\...\Google\Chrome (and its Google parent) if they have no
-# remaining values or subkeys. Preserves unrelated Chrome policies.
 function Remove-EmptyParentKeys {
     if (-not (Test-Path $RegPath)) { return }
     $hasProps   = [bool](Get-Item $RegPath).Property
@@ -147,7 +93,6 @@ function Remove-EmptyParentKeys {
     Write-Host "[OK] Removed empty key: $googleKey" -ForegroundColor Green
 }
 
-# Run a menu action with consistent error handling and a return-to-menu pause.
 function Invoke-MenuAction {
     param([scriptblock]$Action)
     try { & $Action } catch { Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red }
@@ -155,9 +100,6 @@ function Invoke-MenuAction {
     [void](Read-Host 'Press Enter to return to menu')
 }
 
-# Check GitHub once per session for a newer $Version. Returns the remote
-# version string if newer than local, '' if same, $null on any failure
-# (offline, repo missing, parse miss). Cached so menu redraws don't re-fetch.
 $script:UpdateChecked = $false
 $script:UpdateAvailable = $null
 function Get-UpdateAvailable {
@@ -175,20 +117,15 @@ function Get-UpdateAvailable {
     return $script:UpdateAvailable
 }
 
-# ---------------------------------------------------------------------------
-# INSTALL
-# ---------------------------------------------------------------------------
 function Invoke-Install {
     Write-Host ''
     Write-Host '=== Blocking Gemini Nano AI ===' -ForegroundColor White
     Write-Host ''
 
-    # 1. Registry policy
     if (-not (Test-Path $RegPath)) { New-Item -Path $RegPath -Force | Out-Null }
     New-ItemProperty -Path $RegPath -Name $RegName -Value 1 -PropertyType DWord -Force | Out-Null
     Write-Host "[OK] Policy set: $RegPath\$RegName = 1 (DWORD)" -ForegroundColor Green
 
-    # 2. Delete any weights.bin under the model root
     $deleted = 0
     $freed   = 0L
     if (Test-Path -LiteralPath $ModelRoot -PathType Container) {
@@ -210,7 +147,6 @@ function Invoke-Install {
         Write-Host ('[OK] Freed {0} GB.' -f [math]::Round($freed / 1GB, 2)) -ForegroundColor Green
     }
 
-    # 3. Tombstone the OptGuideOnDeviceModel path
     if (Test-Path -LiteralPath $ModelRoot -PathType Leaf) {
         Write-Host "[INFO] Permanent lock already in place at $ModelRoot." -ForegroundColor Cyan
     } else {
@@ -242,15 +178,11 @@ function Invoke-Install {
     Write-Host 'Done. Reboot recommended so the policy applies to running Chrome processes.' -ForegroundColor Yellow
 }
 
-# ---------------------------------------------------------------------------
-# UNINSTALL
-# ---------------------------------------------------------------------------
 function Invoke-Uninstall {
     Write-Host ''
     Write-Host '=== Unblocking Gemini Nano AI ===' -ForegroundColor White
     Write-Host ''
 
-    # 1. Remove the permanent lock (tombstone) if present
     if (Test-Path -LiteralPath $ModelRoot -PathType Leaf) {
         try {
             & takeown /F $ModelRoot     2>&1 | Out-Null
@@ -267,7 +199,6 @@ function Invoke-Uninstall {
         Write-Host "[INFO] No permanent lock found." -ForegroundColor Cyan
     }
 
-    # 2. Remove the registry policy value, then clean up empty parent keys
     if (Test-Path $RegPath) {
         $prop = Get-ItemProperty -Path $RegPath -Name $RegName -ErrorAction SilentlyContinue
         if ($prop) {
@@ -286,9 +217,6 @@ function Invoke-Uninstall {
     Write-Host 'Done. Restart Chrome -- it will re-download the model the next time it needs it.' -ForegroundColor Yellow
 }
 
-# ---------------------------------------------------------------------------
-# DISABLE ALL CHROME AI (umbrella + per-feature policies)
-# ---------------------------------------------------------------------------
 function Invoke-DisableAllAi {
     Write-Host ''
     Write-Host '=== Disabling other Chrome AI features ===' -ForegroundColor White
@@ -305,10 +233,6 @@ function Invoke-DisableAllAi {
     Write-Host 'Done. Reboot or restart Chrome so the policies take effect.' -ForegroundColor Yellow
 }
 
-# ---------------------------------------------------------------------------
-# RE-ENABLE ALL CHROME AI (remove what DisableAllAi set, leave foundational
-# policy and tombstone alone)
-# ---------------------------------------------------------------------------
 function Invoke-EnableAllAi {
     Write-Host ''
     Write-Host '=== Re-enabling other Chrome AI features ===' -ForegroundColor White
@@ -334,9 +258,6 @@ function Invoke-EnableAllAi {
     Write-Host 'Done. Restart Chrome so the policy changes take effect.' -ForegroundColor Yellow
 }
 
-# ---------------------------------------------------------------------------
-# MENU
-# ---------------------------------------------------------------------------
 function Get-CurrentStatus {
     $regOn   = $false
     $tombOn  = $false
@@ -346,7 +267,6 @@ function Get-CurrentStatus {
     } catch { }
     if (Test-Path -LiteralPath $ModelRoot -PathType Leaf) { $tombOn = $true }
 
-    # All-AI block is "on" when the umbrella is set to 2.
     try {
         if ((Get-ItemPropertyValue -Path $RegPath -Name 'GenAiDefaultSettings' -ErrorAction Stop) -eq 2) { $allAiOn = $true }
     } catch { }

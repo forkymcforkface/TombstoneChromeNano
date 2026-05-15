@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# TombstoneChromeNano (Linux) -- block Chrome's Gemini Nano on-device AI model
-# Copyright (c) 2026 Kev (forkymcforkface) -- https://github.com/forkymcforkface
-# SPDX-License-Identifier: MIT  (see LICENSE)
 
 VERSION='1.0.0'
 VERSION_CHECK_URL='https://raw.githubusercontent.com/forkymcforkface/tombstonechromenano/main/tombstonenano-linux.sh'
 
-# --- Colors (ANSI) ---
 R=$'\033[0m'; W=$'\033[97m'; CY=$'\033[36m'; DCY=$'\033[2;36m'
 GR=$'\033[32m'; YL=$'\033[33m'; RD=$'\033[31m'; GY=$'\033[90m'
 
-# --- Self-elevate via sudo if not root ---
 if [ "$(id -u)" -ne 0 ]; then
     echo "${CY}Re-launching with sudo...${R}"
     src="$0"
@@ -21,7 +16,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exec sudo -E bash "$src" "$@"
 fi
 
-# --- Detect ChromeOS (Chromebook Plus is the only variant that ships Nano) ---
 PLATFORM='Linux'
 IS_CHROMEOS=0
 if [ -f /etc/lsb-release ] && grep -q '^CHROMEOS_RELEASE_BOARD=' /etc/lsb-release 2>/dev/null; then
@@ -29,10 +23,7 @@ if [ -f /etc/lsb-release ] && grep -q '^CHROMEOS_RELEASE_BOARD=' /etc/lsb-releas
     PLATFORM='ChromeOS'
 fi
 
-# --- Resolve target user + paths ---
 if [ "$IS_CHROMEOS" = "1" ]; then
-    # ChromeOS browser data lives under /home/chronos/user (the mounted encrypted home).
-    # Run this from crosh (Ctrl+Alt+T -> shell) in developer mode.
     TARGET_USER='chronos'
     TARGET_HOME='/home/chronos/user'
     MODEL_ROOT="$TARGET_HOME/OptGuideOnDeviceModel"
@@ -52,19 +43,14 @@ POLICY_DIR='/etc/opt/chrome/policies/managed'
 POLICY_FILE_MAIN="$POLICY_DIR/tombstonechromenano-foundational.json"
 POLICY_FILE_AI="$POLICY_DIR/tombstonechromenano-allai.json"
 
-# chattr may be unavailable (busybox) or unsupported (tmpfs, some btrfs configs)
 HAS_CHATTR=0
 command -v chattr >/dev/null 2>&1 && HAS_CHATTR=1
 
-# ---------------------------------------------------------------------------
-# INSTALL
-# ---------------------------------------------------------------------------
 invoke_install() {
     echo
     echo "${W}=== Blocking Gemini Nano AI ===${R}"
     echo
 
-    # 1. JSON policy (rootfs may be read-only on stock ChromeOS)
     if mkdir -p "$POLICY_DIR" 2>/dev/null && cat > "$POLICY_FILE_MAIN" 2>/dev/null <<'EOF'
 {
   "GenAILocalFoundationalModelSettings": 1
@@ -76,7 +62,6 @@ EOF
         echo "${YL}[WARN] Could not write $POLICY_FILE_MAIN (rootfs read-only?). Lock file alone will still block re-download.${R}"
     fi
 
-    # 2. Delete any weights.bin
     local deleted=0 freed=0
     if [ -d "$MODEL_ROOT" ]; then
         while IFS= read -r w; do
@@ -100,16 +85,13 @@ EOF
         echo "${GR}[OK] Freed $total GB.${R}"
     fi
 
-    # 3. Permanent lock
     if [ -f "$MODEL_ROOT" ] && [ ! -d "$MODEL_ROOT" ]; then
         echo "${CY}[INFO] Permanent lock already in place at $MODEL_ROOT.${R}"
     else
-        # Clear any stale immutable flag before deleting
         [ "$HAS_CHATTR" = "1" ] && chattr -i "$MODEL_ROOT" 2>/dev/null || true
         [ -d "$MODEL_ROOT" ] && rm -rf "$MODEL_ROOT"
         mkdir -p "$(dirname "$MODEL_ROOT")"
 
-        # 1 KB payload: note text, right-padded with spaces to exactly 1024 bytes
         printf '%-1024s' 'TOMBSTONE: blocks Chrome Gemini Nano on-device model. To remove, re-run this script and choose Uninstall.' > "$MODEL_ROOT"
         chown "$TARGET_USER:$TARGET_USER" "$MODEL_ROOT" 2>/dev/null || chown "$TARGET_USER" "$MODEL_ROOT"
         chmod 444 "$MODEL_ROOT"
@@ -132,15 +114,11 @@ EOF
     echo "${YL}Done. Restart Chrome so the policy applies to running processes.${R}"
 }
 
-# ---------------------------------------------------------------------------
-# UNINSTALL
-# ---------------------------------------------------------------------------
 invoke_uninstall() {
     echo
     echo "${W}=== Unblocking Gemini Nano AI ===${R}"
     echo
 
-    # 1. Remove permanent lock if present
     if [ -f "$MODEL_ROOT" ] && [ ! -d "$MODEL_ROOT" ]; then
         [ "$HAS_CHATTR" = "1" ] && chattr -i "$MODEL_ROOT" 2>/dev/null || true
         chmod 644 "$MODEL_ROOT" 2>/dev/null || true
@@ -155,7 +133,6 @@ invoke_uninstall() {
         echo "${CY}[INFO] No permanent lock found.${R}"
     fi
 
-    # 2. Remove policy file
     if [ -f "$POLICY_FILE_MAIN" ]; then
         rm -f "$POLICY_FILE_MAIN"
         echo "${GR}[OK] Policy file removed: $POLICY_FILE_MAIN${R}"
@@ -167,9 +144,6 @@ invoke_uninstall() {
     echo "${YL}Done. Restart Chrome -- it will re-download the model the next time it needs it.${R}"
 }
 
-# ---------------------------------------------------------------------------
-# DISABLE / RE-ENABLE all other AI features
-# ---------------------------------------------------------------------------
 invoke_disable_all_ai() {
     echo
     echo "${W}=== Disabling other Chrome AI features ===${R}"
@@ -204,9 +178,6 @@ invoke_enable_all_ai() {
     echo "${YL}Done. Restart Chrome.${R}"
 }
 
-# ---------------------------------------------------------------------------
-# STATUS
-# ---------------------------------------------------------------------------
 get_current_status() {
     POLICY_ON='allowed'; POLICY_COLOR=$GY
     TOMB_ON='off';       TOMB_COLOR=$GY
@@ -222,9 +193,6 @@ get_current_status() {
     fi
 }
 
-# ---------------------------------------------------------------------------
-# UPDATE CHECK (cached once per session, 3s timeout)
-# ---------------------------------------------------------------------------
 UPDATE_CHECKED=0
 UPDATE_AVAILABLE=''
 get_update_available() {
@@ -240,9 +208,6 @@ get_update_available() {
     echo "$UPDATE_AVAILABLE"
 }
 
-# ---------------------------------------------------------------------------
-# MENU
-# ---------------------------------------------------------------------------
 invoke_menu_action() {
     "$1" || echo "${RD}ERROR: action returned non-zero${R}"
     echo

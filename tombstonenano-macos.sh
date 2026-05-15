@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
-# TombstoneChromeNano (macOS) -- block Chrome's Gemini Nano on-device AI model
-# Copyright (c) 2026 Kev (forkymcforkface) -- https://github.com/forkymcforkface
-# SPDX-License-Identifier: MIT  (see LICENSE)
 
 VERSION='1.0.0'
 VERSION_CHECK_URL='https://raw.githubusercontent.com/forkymcforkface/tombstonechromenano/main/tombstonenano-macos.sh'
 
-# --- Colors (ANSI) ---
 R=$'\033[0m'; W=$'\033[97m'; CY=$'\033[36m'; DCY=$'\033[2;36m'
 GR=$'\033[32m'; YL=$'\033[33m'; RD=$'\033[31m'; GY=$'\033[90m'
 
-# --- Self-elevate via sudo if not root ---
 if [ "$(id -u)" -ne 0 ]; then
     echo "${CY}Re-launching with sudo...${R}"
-    # When run via `bash <(curl ...)`, $0 may be /dev/fd/N which sudo cannot
-    # re-execute. In that case, persist a copy to /tmp first.
     src="$0"
     if [ ! -r "$src" ] || ! grep -q 'TombstoneChromeNano' "$src" 2>/dev/null; then
         src="/tmp/tombstonenano-macos.sh"
@@ -23,7 +16,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exec sudo -E bash "$src" "$@"
 fi
 
-# --- Resolve target user (the one running Chrome) ---
 if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
     TARGET_USER="$SUDO_USER"
 else
@@ -37,7 +29,6 @@ TARGET_HOME=$(dscl . -read "/Users/$TARGET_USER" NFSHomeDirectory 2>/dev/null | 
 MODEL_ROOT="$TARGET_HOME/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel"
 POLICY_DOMAIN='/Library/Managed Preferences/com.google.Chrome'
 
-# --- Policy helpers (defaults handles path domains without .plist suffix) ---
 write_policy()  { defaults write "$POLICY_DOMAIN" "$1" -int "$2"; }
 remove_policy() { defaults delete "$POLICY_DOMAIN" "$1" 2>/dev/null || true; }
 get_policy()    { defaults read "$POLICY_DOMAIN" "$1" 2>/dev/null; }
@@ -51,20 +42,15 @@ EXTRA_AI_POLICIES=(
     'DevToolsGenAiSettings'
 )
 
-# ---------------------------------------------------------------------------
-# INSTALL
-# ---------------------------------------------------------------------------
 invoke_install() {
     echo
     echo "${W}=== Blocking Gemini Nano AI ===${R}"
     echo
 
-    # 1. Policy
     mkdir -p "$(dirname "$POLICY_DOMAIN")"
     write_policy 'GenAILocalFoundationalModelSettings' 1
     echo "${GR}[OK] Policy set: ${POLICY_DOMAIN}.plist GenAILocalFoundationalModelSettings = 1${R}"
 
-    # 2. Delete any weights.bin
     local deleted=0 freed=0
     if [ -d "$MODEL_ROOT" ]; then
         while IFS= read -r w; do
@@ -88,14 +74,12 @@ invoke_install() {
         echo "${GR}[OK] Freed $total GB.${R}"
     fi
 
-    # 3. Permanent lock
     if [ -f "$MODEL_ROOT" ] && [ ! -d "$MODEL_ROOT" ]; then
         echo "${CY}[INFO] Permanent lock already in place at $MODEL_ROOT.${R}"
     else
         [ -d "$MODEL_ROOT" ] && rm -rf "$MODEL_ROOT"
         mkdir -p "$(dirname "$MODEL_ROOT")"
 
-        # 1 KB payload: note text, right-padded with spaces to exactly 1024 bytes
         printf '%-1024s' 'TOMBSTONE: blocks Chrome Gemini Nano on-device model. To remove, re-run this script and choose Uninstall.' > "$MODEL_ROOT"
         chown "$TARGET_USER" "$MODEL_ROOT"
         chmod 444 "$MODEL_ROOT"
@@ -110,15 +94,11 @@ invoke_install() {
     echo "${YL}Done. Restart Chrome so the policy applies to running processes.${R}"
 }
 
-# ---------------------------------------------------------------------------
-# UNINSTALL
-# ---------------------------------------------------------------------------
 invoke_uninstall() {
     echo
     echo "${W}=== Unblocking Gemini Nano AI ===${R}"
     echo
 
-    # 1. Remove permanent lock if present
     if [ -f "$MODEL_ROOT" ] && [ ! -d "$MODEL_ROOT" ]; then
         chflags noschg "$MODEL_ROOT" 2>/dev/null || true
         chflags nouchg "$MODEL_ROOT" 2>/dev/null || true
@@ -134,7 +114,6 @@ invoke_uninstall() {
         echo "${CY}[INFO] No permanent lock found.${R}"
     fi
 
-    # 2. Remove policy
     if get_policy 'GenAILocalFoundationalModelSettings' >/dev/null 2>&1; then
         remove_policy 'GenAILocalFoundationalModelSettings'
         echo "${GR}[OK] Policy value removed: GenAILocalFoundationalModelSettings${R}"
@@ -146,9 +125,6 @@ invoke_uninstall() {
     echo "${YL}Done. Restart Chrome -- it will re-download the model the next time it needs it.${R}"
 }
 
-# ---------------------------------------------------------------------------
-# DISABLE / RE-ENABLE all other AI features
-# ---------------------------------------------------------------------------
 invoke_disable_all_ai() {
     echo
     echo "${W}=== Disabling other Chrome AI features ===${R}"
@@ -177,9 +153,6 @@ invoke_enable_all_ai() {
     echo "${YL}Done. Restart Chrome.${R}"
 }
 
-# ---------------------------------------------------------------------------
-# STATUS
-# ---------------------------------------------------------------------------
 get_current_status() {
     POLICY_ON='allowed';  POLICY_COLOR=$GY
     TOMB_ON='off';        TOMB_COLOR=$GY
@@ -189,9 +162,6 @@ get_current_status() {
     [ "$(get_policy 'GenAiDefaultSettings' 2>/dev/null)" = "2" ]            && { ALLAI_ON='DISABLED'; ALLAI_COLOR=$GR; }
 }
 
-# ---------------------------------------------------------------------------
-# UPDATE CHECK (cached once per session, 3s timeout)
-# ---------------------------------------------------------------------------
 UPDATE_CHECKED=0
 UPDATE_AVAILABLE=''
 get_update_available() {
@@ -207,9 +177,6 @@ get_update_available() {
     echo "$UPDATE_AVAILABLE"
 }
 
-# ---------------------------------------------------------------------------
-# MENU
-# ---------------------------------------------------------------------------
 invoke_menu_action() {
     "$1" || echo "${RD}ERROR: action returned non-zero${R}"
     echo
