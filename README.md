@@ -7,14 +7,6 @@ TombstoneChromeNano allows you to
 
 ---
 
-## What Chrome did
-
-Chrome quietly downloaded a roughly **4 GB on-device AI model** called Gemini Nano onto your machine. It lives in a folder named `OptGuideOnDeviceModel` inside your Chrome profile and powers features like "Help me write" and tab grouping suggestions.
-
-Most people never agreed to it, can't easily delete it (Chrome just re-downloads on the next launch), and the disk-space bill adds up fast across an organization. This tool removes the model **and drops a tiny placeholder file Chrome can't overwrite**, so it stays gone.
-
----
-
 ## Quick install
 
 ### Windows
@@ -185,7 +177,3 @@ sudo rm /etc/opt/chrome/policies/managed/tombstonechromenano-foundational.json
 ## License
 
 MIT — see [LICENSE](./LICENSE).
-
-## Author
-
-Kev — [github.com/forkymcforkface](https://github.com/forkymcforkface)
