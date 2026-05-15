@@ -1,0 +1,10 @@
+# Auto-detect text vs binary; normalize text files to LF in the repo
+* text=auto eol=lf
+
+# Force LF for shell scripts, docs, and license (cross-platform consistency)
+*.sh    text eol=lf
+*.md    text eol=lf
+LICENSE text eol=lf
+
+# Force CRLF for Windows PowerShell scripts (native Windows convention)
+*.ps1   text eol=crlf
