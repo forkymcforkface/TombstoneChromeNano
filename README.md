@@ -56,7 +56,7 @@ It auto-detects ChromeOS and switches paths. On stock ChromeOS the policy file m
 
 ---
 
-## The menu
+## Menu
 
 | Option | What it does |
 |---|---|
@@ -69,7 +69,7 @@ It auto-detects ChromeOS and switches paths. On stock ChromeOS the policy file m
 
 ---
 
-## The case for a permanent lock
+## Why permlock
 
 Three layers, each can fail on its own:
 
